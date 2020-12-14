@@ -1,1 +1,2 @@
 # abundanceR
+The purpose of this package is to estimate wildlife abundance based on line transact surveys. Distance sampling data is used, and different detection functions are fitted, as well as different adjustment settings. I apply Random Forest and load environmental variables to predict the species density at each quadrat of the raster layers. The prediction is adjusted by the observations from distance sampling.

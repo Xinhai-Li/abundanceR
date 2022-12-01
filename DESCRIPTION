@@ -1,6 +1,6 @@
 Package: abundanceR
 Title: Estimate wildlife abundance based on distance sampling and species distribution models
-Version: 0.0.0.9000
+Version: 0.0.0.9100
 Authors@R: 
     person(given = "Xinhai",
            family = "Li",
@@ -13,3 +13,10 @@ Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
+Depends: 
+    R (>= 2.10)
+Imports:
+    Distance
+    raster
+    sp
+    randomForest

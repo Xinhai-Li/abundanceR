@@ -13,18 +13,16 @@
 #'
 #' @param survey A data.frame with columns 'species', 'size', 'distance', 'Region.Label', 'Effort'
 #'
-#' @return
-#'
 #' @examples
 #'
 #'  attach(kiang)
 #'  AICs = distanceSampling(kiang[kiang$distance<=500,])
 #'  AICs = AICs[!is.na(AICs$AIC),] # sometimes no AIC value can be calculated
-#'  ds.kiang <- ds(kiang, key = AICs$Key[1], adjustment = AICs$Adjustment[1], convert_units = 0.001, truncation=500)
+#'  ds.kiang <- ds(kiang, key = AICs$Key[1], adjustment = AICs$Adjustment[1], convert.units = 0.001, truncation=500) 
 #'  summary(ds.kiang)
 #'  SM = summary(ds.kiang)
 #'  Average.p = SM$ds$average.p; Average.p # average detection rate across the distance range
-#'  error.survey = 1 - Average.p # survey uncertainty
+#'  survey.uncertainty = 1 - Average.p # survey uncertainty
 #'  plot(ds.kiang, main=paste("Key:", AICs$Key[1], "\n", "Adjustment:", AICs$Adjustment[1], sep=" "))
 #'
 #' @import Distance
@@ -66,11 +64,9 @@ distanceSampling = function(survey){
 #' @param buffer A value of distance (unit: degree) defining the width of buffer zone outside the occurrences
 #' @param Envlayers A RasterBrick (a multi-layer raster object)
 #'
-#' @return
-#'
 #' @examples
 #'  attach(kiang) # load occurrences data
-#'  attach(BioClim)
+#'  attach(BioClim) 
 #'  BioClim = cropLayers(kiang, buffer=0.5, Envlayers=BioClim) # buffer=0.5 arc degree
 #'
 #' @import raster
@@ -107,8 +103,8 @@ cropLayers = function(species, buffer, Envlayers){
 #'
 #' @examples
 #'  attach(kiang) # load occurrences data
-#'  attach(BioClim)
-#'  Data = getEnvDatakiang, buffer=0.5, absence=30, Envlayers=BioClim); head(Data)
+#'  attach(BioClim) 
+#'  Data = getEnvData(kiang, buffer=0.5, absence=30, Envlayers=BioClim); head(Data)
 #'
 #' @import raster
 #' @export
@@ -124,7 +120,7 @@ getEnvData = function(species, buffer, absence, Envlayers){
   bak = cbind(Name='absent', size=0, bak)
   bak = cbind(bak, back)
   no.layers = nlayers(Envlayers)
-  names(bak)[(no.layers+3):(no.layers+4)] = c('Lon','Lat')
+  names(bak)[(no.layers+3):(no.layers+4)] = c('Lon','Lat') 
   bak = bak[!is.na(bak$elev),]
   spe = extract(Envlayers, species.loc) #Lon MUST be the first column
   spe = as.data.frame(spe)
@@ -158,7 +154,7 @@ getEnvData = function(species, buffer, absence, Envlayers){
 #' building the species distribution model
 #' RF <- randomForest(Dat.fill[,2:(no.col-5)], Dat.fill[,1], ntree=500, importance=TRUE, na.action=na.roughfix)
 #' RF # show results
-#' error.SDM = 1-max(RF$rsq)
+#' model.uncertainty = 1-max(RF$rsq)
 #'
 #' pred = popSize(BioClim, RF)
 #' plot(pred)
@@ -195,32 +191,38 @@ popSize = function(ENV=BioClim, model=RF){
 #' data(shape)
 #' tracks = trackPoints(shape)
 #'
-#' @import sp
+#' @import sf
+#' @import geodist
+#' 
 #' @export
 #'
 
 trackPoints = function(shape){
-  coord = coordinates(shape)# package sp, list of sections
-  lonlat = as.data.frame(coord[[1]][[1]])
-  names(lonlat) = c('Lon', 'Lat')
-  Dist = 0
-  for (k in 2:length(coord)){
-    LL = as.data.frame(coord[[k]][[1]])
-    names(LL) = c('Lon', 'Lat')
-    S = LL
-    S = cbind(S, dist=NA)
-    N = nrow(S)
-    for (i in 1:(N-1)){
-      S$dist[i+1] = (((S$Lat[i+1]-S$Lat[i])*39946.79/360)^2+
-                       ((S$Lon[i+1]-S$Lon[i])*pi*12756.32/360*cos(S$Lat[i]*pi*2/360))^2)^0.5
+  lines_cast <- st_cast(shape, "LINESTRING")
+  points_coords <- st_coordinates(lines_cast)
+  df <- as.data.frame(points_coords[, c("X", "Y")])
+  names(df) = c("lon", "lat")
+  
+  sparse_by_distance <- function(df, min_dist_m = 1000) {
+    if (nrow(df) == 0) return(df[0, ])
+    selected <- df[1, , drop = FALSE]
+    for (i in 2:nrow(df)) {
+      dists <- geodist::geodist(
+        df[i, c("lon", "lat"), drop = FALSE],
+        selected,
+        measure = "haversine"
+      )
+      if (all(dists >= min_dist_m)) {
+        selected <- rbind(selected, df[i, , drop = FALSE])
+      }
     }
-    dist = sum(S$dist, na.rm=T)
-    Dist = dist + Dist # total distance of the survey routes
-    lonlat = rbind(lonlat, LL) # total points of the routes
+    rownames(selected) <- NULL
+    return(selected)
   }
-  thin = nrow(lonlat) / Dist
-  LonLat = lonlat[seq(1, nrow(lonlat), by = floor(thin)), ]
-  return(LonLat)
+  
+  df_sparse <- sparse_by_distance(df, min_dist_m = 1000)
+  names(df_sparse) = c("Lon", "Lat")
+  return(df_sparse)
 }
 #PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
 
@@ -293,7 +295,7 @@ estPopSize = function(pop.pred, tracks, species, detection){
 #'
 #' @examples
 #'
-#'  error.adjust = spatialMatch(species, tracks, pop.pred, 4); error.adjust
+#'  adjust.uncertainty = spatialMatch(species, tracks, pop.pred, 4); adjust.uncertainty
 #'
 #' @import raster
 #' @export
@@ -321,7 +323,7 @@ spatialMatch = function(species, tracks, pop.pred, grid=4){
     }
   }
   Match = Match[! Match == Inf]
-  error.Match = sd(Match, na.rm=T)
+  error.Match = sd(Match, na.rm=T) 
   return(error.Match)
 }
 ## BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
@@ -344,13 +346,13 @@ spatialMatch = function(species, tracks, pop.pred, grid=4){
 #' @return The 95% confidence interval of the estimated population size
 #'
 #' @examples
-#' CI(EST[4], error.survey, error.SDM, error.adjust)
-#' CI(EST[4], 0.001, error.SDM, error.adjust)
-#' CI(EST[4], error.survey, 0.001, error.adjust)
-#' CI(EST[4], error.survey, error.SDM, 0.001)
-#' CI(EST[4], 0.001, 0.001, error.adjust)
-#' CI(EST[4], 0.001, error.SDM, 0.001)
-#' CI(EST[4], error.survey, 0.001, 0.001)
+#' CI(EST[4], survey.uncertainty, model.uncertainty, adjust.uncertainty)
+#' CI(EST[4], 0.001, model.uncertainty, adjust.uncertainty)
+#' CI(EST[4], survey.uncertainty, 0.001, adjust.uncertainty)
+#' CI(EST[4], survey.uncertainty, model.uncertainty, 0.001)
+#' CI(EST[4], 0.001, 0.001, adjust.uncertainty)
+#' CI(EST[4], 0.001, model.uncertainty, 0.001)
+#' CI(EST[4], survey.uncertainty, 0.001, 0.001)
 #'
 #' @export
 #'
